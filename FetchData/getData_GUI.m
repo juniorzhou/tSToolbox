@@ -22,7 +22,7 @@ function varargout = getData_GUI(varargin)
 
 % Edit the above text to modify the response to help getData_GUI
 
-% Last Modified by GUIDE v2.5 21-Nov-2019 11:41:12
+% Last Modified by GUIDE v2.5 19-Feb-2023 15:13:56
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -42,7 +42,7 @@ else
     gui_mainfcn(gui_State, varargin{:});
 end
 
-addpath('../irisFetch/');
+addpath('../irisFetch-matlab-2.0.12/');
 
 % End initialization code - DO NOT EDIT
 
@@ -78,13 +78,13 @@ plot(C.coastlon,C.coastlat,'k-'); daspect([1 1 1]); ylim([-90 75])
 
 %for testing, put some initial values on the etxt boxes
 
-set(handles.minLat_etxt,'string','0');
-set(handles.maxLat_etxt,'string','14');
-set(handles.minLon_etxt,'string','-72');
-set(handles.maxLon_etxt,'string','-62');
+set(handles.minLat_etxt,'string','50');
+set(handles.maxLat_etxt,'string','60');
+set(handles.minLon_etxt,'string','-12');
+set(handles.maxLon_etxt,'string','5');
 
-set(handles.sTime_etxt,'string','2004-01-01 00:00:00');
-set(handles.eTime_etxt,'string','2006-12-31 00:00:00');
+set(handles.sTime_etxt,'string','2000-01-01 00:00:00');
+set(handles.eTime_etxt,'string','2020-12-31 00:00:00');
 
 
 %set initial values for Station Search Parameters
@@ -573,9 +573,9 @@ function staParams_btn_ButtonDownFcn(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 
-% --- Executes on button press in pushbutton9.
-function pushbutton9_Callback(hObject, eventdata, handles)
-% hObject    handle to pushbutton9 (see GCBO)
+% --- Executes on button press in Set_Download_para_btn.
+function Set_Download_para_btn_Callback(hObject, eventdata, handles)
+% hObject    handle to Set_Download_para_btn (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
@@ -609,9 +609,9 @@ if ~isempty(dPar)
     
 end
 
-% --- Executes on button press in pushbutton10.
-function pushbutton10_Callback(hObject, eventdata, handles)
-% hObject    handle to pushbutton10 (see GCBO)
+% --- Executes on button press in Start_download_btn.
+function Start_download_btn_Callback(hObject, eventdata, handles)
+% hObject    handle to Start_download_btn (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
@@ -628,4 +628,15 @@ EM = getappdata(gcf,'Email');
 PW = getappdata(gcf,'Password');
 
 
-dummy = fetchData(E, S, tB, tA, DP, FT, TF, SR, CS, EM, PW);
+datacenter1={};
+datacenter1.name = 'IRIS';
+datacenter1.baselink = 'https://service.iris.edu';
+datacenter_list = datacenter1;
+datacenter1.name = 'GEOFON';
+datacenter1.baselink = 'https://geofon.gfz-potsdam.de';
+datacenter_list(end+1) = datacenter1;
+datacenter1.name = 'ORFEUS';
+datacenter1.baselink = 'https://www.orfeus-eu.org';
+datacenter_list(end+1) = datacenter1;
+
+dummy = fetchData(E, S, tB, tA, DP, FT, TF, SR, CS, EM, PW, datacenter_list);
