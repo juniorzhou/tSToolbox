@@ -67,6 +67,10 @@ for ke=kestart:length(E)
 
         %loop over stations
         datacenter = datacenter_list(kdc);
+        if datacenter.used == 0
+            disp(['skipped download data from ' datacenter.name]);
+            continue;
+        end
         S = Sall(strcmpi({Sall.DataCenter},datacenter.name)); %these are the stations from this datacenter
         for ks=1:length(S)
             %first check to see if this station was active when the earthquake
@@ -175,8 +179,8 @@ for ke=kestart:length(E)
     eventData = E(ke);
     eventtime_yyMMddHHmmss = datetime(eventData.PreferredTime);
     eventtime_yyMMddHHmmss.Format = 'yyMMddHHmmss';
-    fname     = sprintf('%s_%s_%03.0f',tag,eventtime_yyMMddHHmmss,ke);
-    
+    %fname     = sprintf('%s_%s_%03.0f',tag,eventtime_yyMMddHHmmss,ke);
+    fname     = sprintf('%s_%s',tag,eventtime_yyMMddHHmmss);
     save(fname,'Traces','eventData')
     
 end

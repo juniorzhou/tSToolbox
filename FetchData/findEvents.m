@@ -11,9 +11,13 @@ maxZ=srchParams.maxZ;
 minM=srchParams.minM;
 maxM=srchParams.maxM;
 
-E=irisFetch.Events('radialcoordinates'...
-    ,radCoords,'startTime',sTime,'endTime',eTime,'minimumMagnitude',minM,...
-    'maximumMagnitude',maxM,'minimumDepth',minZ,'maximumDepth',maxZ);
+try
+    E=irisFetch.Events('radialcoordinates'...
+        ,radCoords,'startTime',sTime,'endTime',eTime,'minimumMagnitude',minM,...
+        'maximumMagnitude',maxM,'minimumDepth',minZ,'maximumDepth',maxZ);
+catch ME
+    disp(ME.message)
+    E=[];
+end
 
-
-
+end

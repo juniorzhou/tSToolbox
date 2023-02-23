@@ -1,4 +1,4 @@
-function [S] = findStations(srchParams)
+function [S] = findStations(srchParams,datacenter_list)
 
 %function [] = findStations(latLonbox,sTime,eTime)
 %latLonbox = [minLat maxLat minLon maxLon]
@@ -40,25 +40,31 @@ else
     chan='BHZ,HHZ';
 end
 
-%S=irisFetch.Stations(detl,net,sta,loc,chan,'boxcoordinates'...
-%    ,latLonBox,'startTime',sTime,'endTime',eTime,'StartAfter','1950-01-01');
 
-Sgeofon=irisFetch.Stations(detl,net,sta,loc,chan,'boxcoordinates'...
-    ,latLonBox,'startTime',sTime,'endTime',eTime,'StartAfter','1950-01-01','BASEURL','https://geofon.gfz-potsdam.de/fdsnws/station/1/');
-[Sgeofon.DataCenter]=deal('GEOFON');
-
-Sorfeus=irisFetch.Stations(detl,net,sta,loc,chan,'boxcoordinates'...
-    ,latLonBox,'startTime',sTime,'endTime',eTime,'StartAfter','1950-01-01','BASEURL','http://www.orfeus-eu.org/fdsnws/station/1/');
-[Sorfeus.DataCenter]=deal('ORFEUS');
-
-Siris=irisFetch.Stations(detl,net,sta,loc,chan,'boxcoordinates'...
-    ,latLonBox,'startTime',sTime,'endTime',eTime,'StartAfter','1950-01-01');
-[Siris.DataCenter]=deal('IRIS');
-
+for i=1:length(datacenter_list)
+    if strcmp(datacenter_list(i).name,'IRIS')
+        Siris=irisFetch.Stations(detl,net,sta,loc,chan,'boxcoordinates'...
+            ,latLonBox,'startTime',sTime,'endTime',eTime,'StartAfter','1950-01-01');
+        [Siris.DataCenter]=deal('IRIS');
+    elseif datacenter_list(i).used == true
+        stationurl = strcat(datacenter_list(i).baselink,'/fdsnws/station/1/');
+        temS = irisFetch.Stations(detl,net,sta,loc,chan,'boxcoordinates'...
+            ,latLonBox,'startTime',sTime,'endTime',eTime,'StartAfter','1950-01-01','BASEURL',stationurl);
+        [temS.DataCenter]=deal(datacenter_list(i).name);
+        if exist('allothers','var')
+            allothers = [allothers, temS];
+        else
+            allothers = temS;
+        end
+    else
+        continue
+    end
+end
 %note: the startafter parameter is to avoid picking up synthetic stations
 %that have startTimes of 1900-01-01.
 
-SS=[Siris, Sgeofon, Sorfeus];
+%SS=[Siris, Sgeofon, Sorfeus, Sauspass];
+SS=[Siris, allothers];
 cde={SS.StationCode};
 [ucd ix]= unique(cde);
 

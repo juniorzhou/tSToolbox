@@ -22,7 +22,7 @@ function varargout = getData_GUI(varargin)
 
 % Edit the above text to modify the response to help getData_GUI
 
-% Last Modified by GUIDE v2.5 19-Feb-2023 15:13:56
+% Last Modified by GUIDE v2.5 22-Feb-2023 13:37:00
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -78,10 +78,10 @@ plot(C.coastlon,C.coastlat,'k-'); daspect([1 1 1]); ylim([-90 75])
 
 %for testing, put some initial values on the etxt boxes
 
-set(handles.minLat_etxt,'string','50');
-set(handles.maxLat_etxt,'string','60');
-set(handles.minLon_etxt,'string','-12');
-set(handles.maxLon_etxt,'string','5');
+set(handles.minLat_etxt,'string','-50');
+set(handles.maxLat_etxt,'string','-10');
+set(handles.minLon_etxt,'string','100');
+set(handles.maxLon_etxt,'string','160');
 
 set(handles.sTime_etxt,'string','2000-01-01 00:00:00');
 set(handles.eTime_etxt,'string','2020-12-31 00:00:00');
@@ -95,9 +95,9 @@ setappdata(gcf,'loc','');
 setappdata(gcf,'chan','BHZ,HHZ');
 
 %set initial values for Event Search Parameters
-setappdata(gcf,'minZ',0);
+setappdata(gcf,'minZ',200);
 setappdata(gcf,'maxZ',750);
-setappdata(gcf,'minM',5.5);
+setappdata(gcf,'minM',6);
 setappdata(gcf,'maxM',10);
 
 %set initial values for download parameters
@@ -106,7 +106,7 @@ setappdata(gcf, 'tAfter'        , 600);
 setappdata(gcf, 'Taper_Fraction', 0.2);
 setappdata(gcf, 'SampleRate'    , 20);
 setappdata(gcf, 'DownloadPhase' , 'P');
-setappdata(gcf, 'FileTag'       , 'DefaultName');
+setappdata(gcf, 'FileTag'       , 'AUS');
 setappdata(gcf, 'ChannelString' , 'BHZ,HHZ');
 setappdata(gcf, 'Email'         , '');
 setappdata(gcf, 'Password'      , '');
@@ -286,7 +286,7 @@ srchParams.chan=getappdata(gcf,'chan');
 % call the function 
 set(gcf,'pointer','watch'); drawnow
 
-[S] = findStations(srchParams);
+[S] = findStations(srchParams,handles.Set_Datacenter_btn.UserData);
 set(gcf,'pointer','arrow'); drawnow
 
 % make the plot
@@ -406,39 +406,43 @@ srchParams.maxM=getappdata(gcf,'maxM');
 set(gcf,'pointer','watch'); drawnow
 
 [E] = findEvents(srchParams);
-set(gcf,'pointer','arrow'); drawnow
+if ~isempty(E)
+    set(gcf,'pointer','arrow'); drawnow
 
-% make the plot
-subplot(handles.map_ax);
-h1=plot([E.PreferredLongitude],[E.PreferredLatitude],'r.');
-%add a line showing the searched-for area
-ang=0:360;
-[ly1,lx1]=reckon(Lat,Lon,minRad,ang);
+    % make the plot
+    subplot(handles.map_ax);
+    h1=plot([E.PreferredLongitude],[E.PreferredLatitude],'r.');
+    %add a line showing the searched-for area
+    ang=0:360;
+    [ly1,lx1]=reckon(Lat,Lon,minRad,ang);
 
-%this is to avoid breaks in the line
-if max(diff(lx1))>300
-   [m, ix]= max(diff(lx1));
-   lx1=[lx1(1:ix) NaN lx1(ix+1:end)];
-   ly1=[ly1(1:ix) NaN ly1(ix+1:end)];
+    %this is to avoid breaks in the line
+    if max(diff(lx1))>300
+    [m, ix]= max(diff(lx1));
+    lx1=[lx1(1:ix) NaN lx1(ix+1:end)];
+    ly1=[ly1(1:ix) NaN ly1(ix+1:end)];
+    end
+
+    [ly2,lx2]=reckon(Lat,Lon,maxRad,ang);
+    %this is to avoid breaks in the line
+    if max(diff(lx2))>300
+    [m, ix]= max(diff(lx2));
+    lx2=[lx2(1:ix) NaN lx2(ix+1:end)];
+    ly2=[ly2(1:ix) NaN ly2(ix+1:end)];
+    end
+
+    h2=plot(lx1,ly1,'g-');
+    h3=plot(lx2,ly2,'g-');
+
+    %store handles in appdata (to delete later if desired)
+    HH=getappdata(gcf,'someHandles');
+    setappdata(gcf,'someHandles',[HH h1 h2 h3]);
+
+    %store the station structure in appdata
+    setappdata(gcf,'EStruct',E);
+else
+    disp('No events found')
 end
-
-[ly2,lx2]=reckon(Lat,Lon,maxRad,ang);
-%this is to avoid breaks in the line
-if max(diff(lx2))>300
-   [m, ix]= max(diff(lx2));
-   lx2=[lx2(1:ix) NaN lx2(ix+1:end)];
-   ly2=[ly2(1:ix) NaN ly2(ix+1:end)];
-end
-
-h2=plot(lx1,ly1,'g-');
-h3=plot(lx2,ly2,'g-');
-
-%store handles in appdata (to delete later if desired)
-HH=getappdata(gcf,'someHandles');
-setappdata(gcf,'someHandles',[HH h1 h2 h3]);
-
-%store the station structure in appdata
-setappdata(gcf,'EStruct',E);
 
 function lt_etxt_Callback(hObject, eventdata, handles)
 % hObject    handle to lt_etxt (see GCBO)
@@ -626,17 +630,50 @@ SR = getappdata(gcf,'SampleRate');
 CS = getappdata(gcf,'ChannelString');
 EM = getappdata(gcf,'Email');
 PW = getappdata(gcf,'Password');
-
-
-datacenter1={};
-datacenter1.name = 'IRIS';
-datacenter1.baselink = 'https://service.iris.edu';
-datacenter_list = datacenter1;
-datacenter1.name = 'GEOFON';
-datacenter1.baselink = 'https://geofon.gfz-potsdam.de';
-datacenter_list(end+1) = datacenter1;
-datacenter1.name = 'ORFEUS';
-datacenter1.baselink = 'https://www.orfeus-eu.org';
-datacenter_list(end+1) = datacenter1;
+datacenter_list = handles.Set_Datacenter_btn.UserData;
 
 dummy = fetchData(E, S, tB, tA, DP, FT, TF, SR, CS, EM, PW, datacenter_list);
+
+
+% --- Executes on button press in Set_Datacenter_btn.
+function Set_Datacenter_btn_Callback(hObject, eventdata, handles)
+% hObject    handle to Set_Datacenter_btn (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+datacenter1={};
+datacenter1.name = 'IRIS';
+datacenter1.baselink = 'http://service.iris.edu';
+datacenter1.used = 1;
+datacenter_list = datacenter1;
+datacenter1.name = 'GEOFON';
+datacenter1.baselink = 'http://geofon.gfz-potsdam.de';
+datacenter1.used = 1;
+datacenter_list(end+1) = datacenter1;
+datacenter1.name = 'ORFEUS';
+datacenter1.baselink = 'http://www.orfeus-eu.org';
+datacenter1.used = 1;
+datacenter_list(end+1) = datacenter1;
+datacenter1.name = 'AUSPASS';
+datacenter1.baselink = 'http://auspass.edu.au:8080/';
+datacenter1.used = 1;
+datacenter_list(end+1) = datacenter1;
+
+handles.Set_Datacenter_btn.UserData=datacenter_list;
+defAns={};
+prmpt={};
+for i=1:length(datacenter_list)
+    defAns{end+1} = num2str(1);
+    prmpt{end+1} = datacenter_list(i).name;
+end
+
+dPar   = inputdlg(prmpt,'Choice datacenter(1 active,0 not use)', 1, defAns);
+
+for i=1:length(datacenter_list)
+    if str2double(dPar{i}) == 1
+        handles.Set_Datacenter_btn.UserData(i).used = true;
+        disp(['using datacenter: ', handles.Set_Datacenter_btn.UserData(i).name])
+    else
+        handles.Set_Datacenter_btn.UserData(i).used = false;
+    end
+end
+
