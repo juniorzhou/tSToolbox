@@ -51,12 +51,17 @@ for i=1:length(datacenter_list)
         temS = irisFetch.Stations(detl,net,sta,loc,chan,'boxcoordinates'...
             ,latLonBox,'startTime',sTime,'endTime',eTime,'StartAfter','1950-01-01','BASEURL',stationurl);
         [temS.DataCenter]=deal(datacenter_list(i).name);
+        if isempty(temS)
+            disp(['no data from datacenter: ', datacenter_list(i).name])
+            continue
+        end 
         if exist('allothers','var')
             allothers = [allothers, temS];
         else
             allothers = temS;
         end
     else
+        %skip this datacenter
         continue
     end
 end
@@ -64,7 +69,11 @@ end
 %that have startTimes of 1900-01-01.
 
 %SS=[Siris, Sgeofon, Sorfeus, Sauspass];
-SS=[Siris, allothers];
+if exist('allothers','var')
+    SS=[Siris, allothers];
+else
+    SS=Siris;
+end
 cde={SS.StationCode};
 [ucd ix]= unique(cde);
 
