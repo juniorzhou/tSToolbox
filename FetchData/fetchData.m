@@ -27,8 +27,7 @@ function [Traces] = fetchData(E, S, pre, post, phase, tag, taper_fraction, sampl
 % This version does multiple traces for each station
 % This version loops over data center as well. The station structure needs
 % to have a field called DataCenter (this is not irisFetch standard). Right
-% now that field can have values IRIS, GEOFON or ORFEUS. I will implement
-% AUSPASS later.
+% now that field can have values IRIS, GEOFON or ORFEUS and AUPASS
 
 % Attention!!!!
 % email and password are not in used now!!!
@@ -57,7 +56,15 @@ end
 Sall=S; %these are the stations from all the datacenters
 
 for ke=kestart:length(E)
-    
+    eventData = E(ke);
+    eventtime_yyMMddHHmmss = datetime(eventData.PreferredTime);
+    eventtime_yyMMddHHmmss.Format = 'yyMMddHHmmss';
+    fname     = sprintf('%s_%s',tag,eventtime_yyMMddHHmmss);
+    if isfile(strcat(fname,'.mat'))
+        disp(['event ' fname ' already downloaded, skip'])
+        continue
+    end
+
     disp([ num2str(ke) ' of ' num2str(length(E)) ]);
     
     Traces=[];
@@ -70,6 +77,8 @@ for ke=kestart:length(E)
         if datacenter.used == 0
             disp(['skipped download data from ' datacenter.name]);
             continue;
+        else
+            disp(['download data from ' datacenter.name]);
         end
         S = Sall(strcmpi({Sall.DataCenter},datacenter.name)); %these are the stations from this datacenter
         for ks=1:length(S)
@@ -114,6 +123,13 @@ for ke=kestart:length(E)
             
             endTime   = originTimeNum+phase_time/(24*60*60)+post;
             endTime   = datestr(endTime,'yyyy-mm-dd HH:MM:SS.FFF');
+
+            station_starttime = datenum(S(ks).StartDate);
+            station_endtime = datenum(S(ks).EndDate);
+            if station_starttime > datenum(startTime) || station_endtime < datenum(endTime)
+                fprintf('Event %s has no record on station %s\n',fname,S(ks).StationCode)
+                continue
+            end
             
             %fprintf('Trying event #%.0f station %s\n',ke,S(ks).StationCode)
             try
@@ -135,7 +151,7 @@ for ke=kestart:length(E)
             %add phase names and times and add to the whole
             if ~isempty(myTrace)
                 try
-                [myTrace.phaseNames]=deal({'P','S'});
+                    [myTrace.phaseNames]=deal({'P','S'});
                 catch ME
                     keyboard
                 end
@@ -146,6 +162,11 @@ for ke=kestart:length(E)
                     [myTrace.phaseTimes]=deal([ (pTime - sTime) 0]+pre*(24*60*60)); %pre back to seconds
                 end
                 %I know, this is growing inside  a loop.
+                try
+                    myTrace=getresp_fsdn(myTrace,datacenter);
+                catch ME
+                    disp(['getresp_fsdn failed with' ME.message]);
+                end
                 Traces = [Traces myTrace];
                 
                 assignin('base','T',Traces)
@@ -154,7 +175,8 @@ for ke=kestart:length(E)
         end
 
     end
-
+    %combine all saperate trace
+    Traces = connect_trace_data(Traces,2,pre,post);
     %skip to next event if this event had no traces whatsover
     if isempty(Traces)
         disp([ 'event ' num2str(ke) ' is empty' ]);
@@ -165,7 +187,6 @@ for ke=kestart:length(E)
     data = {Traces.data};
     tf_empty  = cellfun('isempty',data);
     Traces    = Traces(~tf_empty);
-    
     for q = 1:length(Traces)
         %demean/detrend
         Traces(q).data = detrend(Traces(q).data);
@@ -173,14 +194,98 @@ for ke=kestart:length(E)
         Traces(q).data = tukeywin(length(Traces(q).data), taper_fraction).*Traces(q).data;
     end
         
-    %Traces   = wfResample(Traces, sample_rate);
-    %Traces   = wfRemInstResp(Traces);
+    Traces   = wfResample(Traces, sample_rate);
+    Traces   = wfRemInstResp_sacpz(Traces);
     
-    eventData = E(ke);
-    eventtime_yyMMddHHmmss = datetime(eventData.PreferredTime);
-    eventtime_yyMMddHHmmss.Format = 'yyMMddHHmmss';
-    %fname     = sprintf('%s_%s_%03.0f',tag,eventtime_yyMMddHHmmss,ke);
-    fname     = sprintf('%s_%s',tag,eventtime_yyMMddHHmmss);
     save(fname,'Traces','eventData')
     
+end
+end
+
+function sanity_check(Traces,netstacha)
+%sanity_check checks the data in Traces
+    for j = 1:length(Traces)
+        if length(Traces(j).data) ~= Traces(j).sampleCount
+            warning(['sampleCount is not equal to length of data ', netstacha{j}])
+        end
+        tem = round((Traces(j).endTime - Traces(j).startTime)*24*60*60*Traces(j).sampleRate+1);
+        if Traces(j).sampleCount ~= tem
+            warning(['sampleCount is not equal to duration ', netstacha{j} ' ' num2str(Traces(j).sampleCount) ' ' num2str(tem)])
+        end
+    end
+end
+
+function S_trace = connect_trace_data(Traces,flag,pre,post)
+%connect_trace_data connects the seismic trace from one station if there is more than one in Traces
+%   connect_trace_data(Traces,flag)
+%   flag = 1: linear interplate
+%   flag = 2: spling interplate
+%   pre and post are in matlab datenum format
+
+    S_trace = [];
+    netstacha = {};
+    pre = pre*24*60*60;
+    post = post*24*60*60;
+    
+    for j = 1:length(Traces)
+        netstacha(j) = {[Traces(j).network '_' Traces(j).station '_' Traces(j).channel]};
+    end
+    sanity_check(Traces,netstacha);
+    unetstacha = unique(netstacha);
+    for j = 1:length(unetstacha)
+    % for each unique station
+        trace_tem_list = Traces(strcmp(netstacha,unetstacha(j)));
+        if length(trace_tem_list) == 1
+            %only one trace
+            sampleRate = trace_tem_list.sampleRate;
+            total_count = (pre+post)*sampleRate;
+            if trace_tem_list.sampleCount ~= total_count
+                warning(['The sample count is not equal to the request time ',unetstacha{j}])
+            else
+                S_trace = [S_trace trace_tem_list];
+            end
+        else
+            if length(unique([trace_tem_list.sampleRate])) ~= 1
+                warning(['The sample rate of the same station is not the same ',unetstacha{j}])
+                continue
+            else
+                sampleRate = unique([trace_tem_list.sampleRate]);
+            end
+            t_start=trace_tem_list(1).startTime;
+            t_duration=[];
+            data_tem=[];
+            t_total_duration = 0:round((trace_tem_list(end).endTime-t_start)*24*60*60*sampleRate);
+            total_count = (pre+post)*sampleRate;
+
+            for k = 1:length(trace_tem_list)
+            %for k = 1 : 5
+                t_start_tem = round((trace_tem_list(k).startTime-t_start)*24*60*60*sampleRate);
+                t_end_tem = round((trace_tem_list(k).endTime-t_start)*24*60*60*sampleRate); 
+                t_duration_tem=t_start_tem:t_end_tem;
+                t_duration=[t_duration t_duration_tem];
+                data_tem=[data_tem trace_tem_list(k).data'];
+            end
+            [tt_duration,i_tt_duration,~]=unique(t_duration);
+            data_tem_f = data_tem(i_tt_duration);
+            if length(tt_duration) ~= length(t_duration)
+                % check if there is any overlaped record
+                warning(['The potential sample overlap exist ',unetstacha{j}])
+            end
+            if flag == 1
+                data_final = interp1(tt_duration,data_tem_f,t_total_duration,'linear');
+            elseif flag == 2
+                data_final = interp1(tt_duration,data_tem_f,t_total_duration,'spline');
+            end
+            trace_tem = trace_tem_list(1);
+            trace_tem.data = data_final';
+            trace_tem.startTime = t_start;
+            trace_tem.endTime = trace_tem_list(end).endTime;
+            trace_tem.sampleCount = length(data_final);
+            if trace_tem.sampleCount ~= total_count
+                warning(['The sample count is not equal to the request time ',unetstacha{j}])
+            else
+                S_trace = [S_trace trace_tem];
+            end
+        end
+    end
 end
