@@ -281,9 +281,16 @@ function S_trace = connect_trace_data(Traces,flag,pre,post)
             trace_tem.startTime = t_start;
             trace_tem.endTime = trace_tem_list(end).endTime;
             trace_tem.sampleCount = length(data_final);
-            if trace_tem.sampleCount ~= total_count
-                warning(['The sample count is not equal to the request time ',unetstacha{j}])
+            if trace_tem.sampleCount <= total_count
+                warning(['The sample count is less than to the request time ',unetstacha{j}])
+            elseif trace_tem.sampleCount > total_count
+                warning(['The sample count is more than to the request time, cut off the later data point ',unetstacha{j}])
+                trace_tem.data = trace_tem.data(1:total_count);
+                trace_tem.sampleCount = total_count;
+                trace_tem.endTim=trace_tem.startTime+(total_count-1)/sampleRate/24/60/60;
+                S_trace = [S_trace trace_tem];
             else
+                % sample count is equal to the request time
                 S_trace = [S_trace trace_tem];
             end
         end
