@@ -46,7 +46,22 @@ function [trace_resp] = getresp_fsdn(Trace,datacenter)
             trace_resp(i).sacpz.used=0;
             continue
         end
-        resp=parse_xmlresp(xmlresp_str);
+        if ~strcmp(xmlresp_str(3:5),'xml')
+            warning("wrong return value for link %s, try again",url)
+            try
+                xmlresp_str=webread(url);
+            catch
+                warning('could not get response for station %s_%s\n%s', ...
+                    network,station,url);
+                trace_resp(i).sacpz.used=0;
+                continue
+            end
+        end
+        if ~strcmp(xmlresp_str(3:5),'xml')
+            warning("wrong return value for link %s, skip",url)
+            continue
+        end    
+        resp=parse_xmlresp(xmlresp_str,url);
         trace_resp(i)=Trace(i);
         if ~strcmp(resp.units, trace_resp(i).sensitivityUnits)
             warning(['response units are not same as the Trace, %s vs %s, this will likely ' ...
@@ -61,9 +76,9 @@ function [trace_resp] = getresp_fsdn(Trace,datacenter)
 end
 
 
-function resp = parse_xmlresp(xmlresp_str)
+function resp = parse_xmlresp(xmlresp_str,url)
     resp={};
-    X=xml2struct_own(xmlresp_str);
+    X=xml2struct_own(xmlresp_str,url);
     %subset to network
     N=X.Children(strcmp({X.Children.Name},'Network'));
     %subset to station
@@ -134,7 +149,7 @@ function resp = parse_xmlresp(xmlresp_str)
     resp.constant=NormFactor;
 end
 
-function theStruct = xml2struct_own(xmlString)
+function theStruct = xml2struct_own(xmlString,url)
 % xml2struct_own Convert XML string to a MATLAB structure.
     try
         % The following avoids the need for file I/O:
