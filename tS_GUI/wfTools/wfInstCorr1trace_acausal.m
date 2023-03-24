@@ -1,7 +1,7 @@
 function  [TrCorr] = wfInstCorr1trace_acausal(Tr, resp)
 
    %zero-pole to transfer function conversion (MATLAB built-in)
-   [resp.poly_num, resp.poly_den] = zp2tf(resp.Zeros*2*pi, resp.Poles*2*pi, resp.Amp); 
+   [resp.poly_num, resp.poly_den] = zp2tf(resp.zeros'*2*pi, resp.poles'*2*pi, resp.constant); 
    % matlab function ADDED 2PI because zeroes and poles are in Hz in RESP files, need them in rad/s
    
    Z=Tr.data;

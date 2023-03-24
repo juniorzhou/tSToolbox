@@ -78,10 +78,10 @@ plot(C.coastlon,C.coastlat,'k-'); daspect([1 1 1]); ylim([-90 75])
 
 %for testing, put some initial values on the etxt boxes
 
-set(handles.minLat_etxt,'string','-50');
-set(handles.maxLat_etxt,'string','-10');
-set(handles.minLon_etxt,'string','100');
-set(handles.maxLon_etxt,'string','160');
+set(handles.minLat_etxt,'string','49');
+set(handles.maxLat_etxt,'string','60');
+set(handles.minLon_etxt,'string','-12');
+set(handles.maxLon_etxt,'string','3');
 
 set(handles.sTime_etxt,'string','2000-01-01 00:00:00');
 set(handles.eTime_etxt,'string','2020-12-31 00:00:00');
@@ -97,7 +97,7 @@ setappdata(gcf,'chan','BHZ,HHZ');
 %set initial values for Event Search Parameters
 setappdata(gcf,'minZ',200);
 setappdata(gcf,'maxZ',750);
-setappdata(gcf,'minM',6);
+setappdata(gcf,'minM',5.5);
 setappdata(gcf,'maxM',10);
 
 %set initial values for download parameters
