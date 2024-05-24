@@ -81,6 +81,7 @@ setappdata(gcf, 'ChannelsKeep', 'BHZ,HHZ');
 setappdata(gcf, 'DeltaUpperLimit', '90');
 setappdata(gcf, 'DeltaLowerLimit', '30');
 setappdata(gcf, 'xrange', '20');
+setappdata(gcf, 'snrcut', '3');
 
 % set the keypress_fcn for the figure
 set(gcf,'WindowKeyPressFcn',@chngTr)
@@ -501,6 +502,8 @@ if plotmode == 1
     if ~isempty(h); delete(h); end
     h=findobj('Tag','theTrace');
     if ~isempty(h); delete(h); end
+    h=findobj('Tag','snrtext');
+    if ~isempty(h); delete(h); end
     
     stfwhtmp    = getappdata(gcf, 'stfwh');
     stfwhalltmp = getappdata(gcf, 'fwh');
@@ -534,6 +537,12 @@ if plotmode == 1
         
         delete(findobj('Tag','theTrace')); %this just gets rid of the previous one
         hTr=plot(t, Traces(cwf).data/rms(Traces(cwf).data(t > stfw & t < fw(2))),'b', 'LineStyle', ls, 'linewidth',1.5);
+        if isfield(Traces(cwf),'snr1') && isfield(Traces(cwf),'snr2')
+            text2print = ['snr ' num2str(Traces(cwf).snr1) ' ' num2str(Traces(cwf).snr2)];
+        end
+        text2print = [text2print ' arc ' num2str(Traces(cwf).evtarc)];
+        snrtext = text(0, 1, text2print, 'Units', 'normalized', 'VerticalAlignment', 'top', 'HorizontalAlignment', 'left');
+        set(snrtext, 'Tag', 'snrtext');
         set(hTr,'Tag','theTrace')
         
         ylimits = ylim;
@@ -582,6 +591,8 @@ elseif plotmode == 2
     if ~isempty(h); delete(h); end
     h=findobj('Tag','srcLegend');
     if ~isempty(h); delete(h); end
+    h=findobj('Tag','snrtext');
+    if ~isempty(h); delete(h); end
     
     stfwh            = getappdata(gcf, 'stfwh');
     fwh            = getappdata(gcf, 'fwh');
@@ -594,6 +605,12 @@ elseif plotmode == 2
         set(hSynth,'Tag','synTr');
         
         hObs=plot(t, Traces(cwf).data/rms(Traces(cwf).data(t > stfw & t < fw(2))),'-','color','k', 'LineStyle', ls, 'linewidth',1.5);
+        if isfield(Traces(cwf),'snr1') && isfield(Traces(cwf),'snr2')
+            text2print = ['snr ' num2str(Traces(cwf).snr1) ' ' num2str(Traces(cwf).snr2)];
+        end
+        text2print = [text2print ' arc ' num2str(Traces(cwf).evtarc)];
+        snrtext = text(0, 1, text2print, 'Units', 'normalized', 'VerticalAlignment', 'top', 'HorizontalAlignment', 'left');
+        set(snrtext, 'Tag', 'snrtext');
         set(hObs,'Tag','srcTr');
         
     end
@@ -685,6 +702,7 @@ function plotMap
     load('CMfine')
     hMapQC  = scatter( [ts_run(fw_ind, useVec).longitude],  [ts_run(fw_ind, useVec).latitude],  50, [ts_run(fw_ind, useVec).tStar_WF],  'filled');
     hMapNQC = scatter( [ts_run(fw_ind, ~useVec).longitude], [ts_run(fw_ind, ~useVec).latitude], 50, [ts_run(fw_ind, ~useVec).tStar_WF], 'filled');
+
     %colormap(cm); hC = colorbar; hC.Location = 'westoutside'; hC.Label.String = '\Deltat*, s';
     %caxis([ min([ts_run(fw_ind, useVec).tStar_WF] - 0.1) max([ts_run(fw_ind, useVec).tStar_WF] + 0.1)]);
     
@@ -833,6 +851,7 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
+
 % --- Executes on button press in LoadDataButton.
 function LoadDataButton_Callback(hObject, eventdata, handles)
 % hObject    handle to LoadDataButton (see GCBO)
@@ -852,6 +871,7 @@ ChannelsKeep    = strsplit(ChannelsKeep,','); %in case ChannelsKeep is a comma-s
 DeltaUpperLimit = str2num(getappdata(gcf, 'DeltaUpperLimit'));
 DeltaLowerLimit = str2num(getappdata(gcf, 'DeltaLowerLimit'));
 xrange          = str2num(getappdata(gcf, 'xrange'));
+snrcut          = str2num(getappdata(gcf, 'snrcut'));
 
 if ~dl
 
@@ -889,11 +909,11 @@ if ~dl
 
             % remove instrument response only when it has not been removed
             % during fetching
-            if (any([Traces.instrument]))
+            %if (any([Traces.instrument]))
 
-                Traces = wfRemInstResp(Traces); 
+            %    Traces = wfRemInstResp_sacpz(Traces); 
 
-            end
+            %end
 
             if ~isnan(filter_bounds)
 
@@ -920,8 +940,9 @@ if ~dl
 
                 Traces(k).data        = Traces(k).data(1:minlen);
                 Traces(k).sampleCount = minlen;
-
             end
+
+            % get
 
             xd             = minlen/Traces(1).sampleRate;
             midpoint       = (xd/2);
@@ -933,15 +954,37 @@ if ~dl
             useVec = true(1, length(Traces));
 
             for k = 1:length(Traces)
-
-                [arc, azi] = distance(eventData.PreferredLatitude, eventData.PreferredLongitude, ...
-                    Traces(k).latitude, Traces(k).longitude);
-
+            % check Antarctica event arc
+                if isfield(Traces(k),'orilat') && isfield(Traces(k),'orilong')
+                    [arc, azi] = distance(eventData.PreferredLatitude,...
+                    eventData.PreferredLongitude, ...
+                    Traces(k).orilat, Traces(k).orilong);
+                else
+                    [arc, azi] = distance(eventData.PreferredLatitude, ...
+                        eventData.PreferredLongitude, ...
+                        Traces(k).latitude, Traces(k).longitude);
+                end
                 if arc < degVec(1) || arc > degVec(2)
 
                     useVec(k) = 0;
 
                 end
+                snrdata = Traces(k).data((midpoint-20)*Traces(1).sampleRate:(midpoint+20)*Traces(1).sampleRate);
+                noisedata = Traces(k).data((midpoint-100)*Traces(1).sampleRate:(midpoint-60)*Traces(1).sampleRate);
+                Traces(k).snr1        = rms(snrdata)/rms(noisedata);
+                Traces(k).snr2        = max(snrdata)/max(abs(noisedata));
+
+                if ((Traces(k).snr1 < snrcut) && (Traces(k).snr2 < snrcut))
+
+                    useVec(k) = 0;
+
+                end
+                
+                if sum(useVec) == 0
+                    disp('no data pass snr,please check')
+                    useVec(k) = 1;
+                end
+                    
 
                 Traces(k).evtarc = arc;
                 Traces(k).evtazi = azi;
@@ -1221,6 +1264,199 @@ if ~dl
 end
 set(gcf,'pointer','arrow')
 
+function ReplotButton_Callback(hObject, eventdata, handles)
+% hObject    handle to LoadDataButton (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+% first some parameters and things, not sure I need all this.
+set(gcf,'pointer','watch')
+
+handles  = guihandles;
+ChannelsKeep    = getappdata(gcf, 'ChannelsKeep');
+ChannelsKeep    = strsplit(ChannelsKeep,','); %in case ChannelsKeep is a comma-separated list
+xrange          = str2num(getappdata(gcf, 'xrange'));
+Traces          = getappdata(gcf, 'Traces');
+fw_start        = getappdata(gcf, 'fw_start');
+fitting_window  = getappdata(gcf, 'fitting_window');
+useVec          = logical(getappdata(gcf, 'useVec'));
+midpoint        = getappdata(gcf, 'midpoint');
+DeltaUpperLimit = str2num(getappdata(gcf, 'DeltaUpperLimit'));
+DeltaLowerLimit = str2num(getappdata(gcf, 'DeltaLowerLimit'));
+useVec          = getappdata(gcf, 'useVec');
+degVec = [ (DeltaLowerLimit) (DeltaUpperLimit) ];
+
+% equalize trace length first
+minlen = 1e100;
+for k = 1:length(Traces)
+
+    minlen = min([minlen length(Traces(k).data)]);
+
+end
+
+for k = 1:length(Traces)
+
+    Traces(k).data        = Traces(k).data(1:minlen);
+    Traces(k).sampleCount = minlen;
+
+end
+
+xd             = minlen/Traces(1).sampleRate;
+if isempty(midpoint)
+    midpoint       = (xd/2);
+end
+xlimits        = [ (midpoint - xrange) ((midpoint) + xrange) ];
+if isempty(fitting_window)
+    fitting_window = [ (midpoint - xrange/3) ((midpoint) + xrange/3) ];
+end
+if isempty(fw_start)
+    fw_start       = (midpoint - xrange/2);
+end
+% set "use" to yes for all of them unless they are out of range
+for k = 1:length(Traces)
+    [~,maxid]=max(abs(Traces(k).data));
+    arc = Traces(k).evtarc;
+    if arc < degVec(1) || arc > degVec(2)
+       useVec(k) = 0;
+    else
+       useVec(k) = 1;
+    end
+    %snrdata = Traces(k).data(maxid-20*Traces(1).sampleRate:maxid+20*Traces(1).sampleRate);
+    %noisedata = Traces(k).data(1:40*Traces(1).sampleRate);
+    %snr = rms(snrdata)/rms(noisedata);
+    %disp(snr)
+    %if snr < snrcut
+        %useVec(k) = 0;
+    %    disp("snr remove")
+    %end
+end
+
+chan = {Traces.channel};
+
+%compare to each name in the ChannelsKeep list (cell array)
+keepTr=false(length(ChannelsKeep),length(chan)); %initialize this
+for k=1:length(ChannelsKeep)
+    keepTr(k,:)=strcmp(chan,ChannelsKeep(k));
+end
+keepTr=sum(keepTr,1);
+%the above will have a logical true for each trace whose
+%channel matches one of the channels in the ChannelsKeep list.
+
+%remove the ones that we're not going to keep.
+Traces(~keepTr) = [];
+useVec(~keepTr) = [];
+
+
+
+if ~any(useVec)
+    
+    f = msgbox('No traces within range', 'Error','error');
+    a=f.Children(3); a.Children.FontSize=14;
+    error('No traces within range');
+    
+end
+
+% set "inSrc" to no for all of them
+inSrcVec = false(1, length(Traces));
+
+t = (1:minlen)/Traces(1).sampleRate;    
+            
+lhtmp       = getappdata(gcf, 'lineHandles');
+stfwhtmp    = getappdata(gcf, 'stfwh');
+stfwhalltmp = getappdata(gcf, 'stfwh_all');
+fwhtmp      = getappdata(gcf, 'fwh');
+fwhalltmp   = getappdata(gcf, 'fwh_all');
+
+if ~isempty(lhtmp);       delete(lhtmp);       end
+if ~isempty(stfwhtmp);    delete(stfwhtmp);    end
+if ~isempty(stfwhalltmp); delete(stfwhalltmp); end
+if ~isempty(fwhtmp);      delete(fwhtmp);      end
+if ~isempty(fwhalltmp);   delete(fwhalltmp);   end
+
+
+axes(handles.allWf_ax)
+hold on
+%plot all of the traces
+
+for k = 1:length(Traces)
+
+    Traces(k).data = Traces(k).data/max(abs(Traces(k).data...
+        (t > fw_start & t < fitting_window(2))));
+
+    %variable name is changed because when you delete above, you
+    %get an empty array. When you assign to the empty array, the
+    %handle is a double, not an object. Seems a bug in matlab?
+    
+    if inSrcVec(k)
+        
+        lw = 4;
+        
+    else
+        
+        lw = 1;
+        
+    end
+    
+    if useVec(k)
+    
+        lh(k) = plot(t, Traces(k).data + k, 'k-', 'lineWidth', lw);
+                        
+    else
+        
+        lh(k) = plot(t, Traces(k).data + k, 'k--', 'lineWidth', 1);
+        
+    end
+
+    lh(k).ButtonDownFcn = @ClickCWF;
+    
+end
+
+xlabel('Time, s')
+xlim(xlimits)
+ylim([-1 (length(lh)+1)])
+
+% plot the first trace in the currWf axis
+setappdata(gcf,'currentWf',     1);
+setappdata(gcf,'nTraces',       length(Traces));
+setappdata(gcf,'lineHandles',   lh);
+setappdata(gcf,'Traces',        Traces);
+setappdata(gcf,'useVec',        useVec);
+setappdata(gcf,'inSrcVec',      inSrcVec);
+setappdata(gcf,'midpoint',      midpoint); %these are the traces that will go into the source estimate
+setappdata(gcf,'xrange',        num2str(xrange)); %these are the traces that will go into the source estimate
+setappdata(gcf,'t',             t);
+setappdata(gcf,'plotmode',      1);
+
+set(lh(1),'color','b','linewidth',4)
+
+axes(handles.currWf_ax); hold on
+h=plot(t, Traces(1).data/max(abs(Traces(k).data...
+        (t > fw_start & t < fitting_window(2)))),'b-','linewidth',2);
+set(h,'Tag','theTrace')
+
+ylimits = ylim;
+stfwh  = plot( [ fw_start fw_start ], [ ylimits(1) ylimits(2) ], 'k--', 'LineWidth', 1.5);
+fwh(1) = plot( [ fitting_window(1) fitting_window(1) ], [ ylimits(1) ylimits(2) ], 'k--', 'LineWidth', 0.5);
+fwh(2) = plot( [ fitting_window(2) fitting_window(2) ], [ ylimits(1) ylimits(2) ], 'k--', 'LineWidth', 0.5);
+setappdata(gcf, 'stfwh', stfwh);
+setappdata(gcf, 'fwh', fwh);
+xlim(xlimits)
+
+axes(handles.allWf_ax)
+ylimits = ylim;
+stfwh_all  = plot( [ fw_start fw_start ], [ ylimits(1) ylimits(2) ], 'k--', 'LineWidth', 1.5);
+fwh_all(1) = plot( [ fitting_window(1) fitting_window(1) ], [ ylimits(1) ylimits(2) ], 'k--', 'LineWidth', 0.5);
+fwh_all(2) = plot( [ fitting_window(2) fitting_window(2) ], [ ylimits(1) ylimits(2) ], 'k--', 'LineWidth', 0.5);
+setappdata(gcf, 'stfwh_all', stfwh_all);
+setappdata(gcf, 'fwh_all', fwh_all);
+
+drawnow
+
+pltSrcTrs  
+plotMap
+    
+set(gcf,'pointer','arrow')
+
+
 % --- Executes on button press in QCButton.
 function QCButton_Callback(hObject, eventdata, handles)
 % hObject    handle to QCButton (see GCBO)
@@ -1434,8 +1670,9 @@ for k = 1:length(Traces)
     
     Traces(k).data = cumsum(Traces(k).data);
     Traces(k).data = Traces(k).data - mean(Traces(k).data);
-    Traces(k).data = Traces(k).data/rms(Traces(k).data(t > stfw & t < fw(2)));
-    
+    %Traces(k).data = Traces(k).data/rms(Traces(k).data(t > stfw & t < fw(2)));
+    Traces(k).data = Traces(k).data/max(Traces(k).data(t > stfw & t < fw(2)));
+
     lh(k).YData    = Traces(k).data + k;
     
     setappdata(gcf,'currentWf',k);
@@ -1490,8 +1727,9 @@ for k = 1:length(Traces)
     
     Traces(k).data = [diff(Traces(k).data); 0];
     Traces(k).data = Traces(k).data - mean(Traces(k).data);
-    Traces(k).data = Traces(k).data/rms(Traces(k).data(t > stfw & t < fw(2)));
-
+    %Traces(k).data = Traces(k).data/rms(Traces(k).data(t > stfw & t < fw(2)));
+    Traces(k).data = Traces(k).data/max(Traces(k).data(t > stfw & t < fw(2)));
+    
     lh(k).YData    = Traces(k).data + k;
     
     setappdata(gcf,'currentWf',k);
@@ -1658,7 +1896,6 @@ setappdata(gcf, 'fwh_all', fwh_all);
 
 setappdata(gcf, 'fw_start', fw_start);
 setappdata(gcf, 'fitting_window', fitting_window);
-
 pltSrcTrs
    
 function LowHz_Callback(hObject, eventdata, handles)
@@ -2053,10 +2290,10 @@ function pushbutton13_Callback(hObject, eventdata, handles)
 
 defAns = { num2str(getappdata(gcf, 'HighCorner')) num2str(getappdata(gcf, 'LowCorner')) ...
     num2str(getappdata(gcf, 'DeltaLowerLimit')) num2str(getappdata(gcf, 'DeltaUpperLimit')) ...
-    getappdata(gcf, 'ChannelsKeep'), num2str(getappdata(gcf, 'xrange')) };
+    getappdata(gcf, 'ChannelsKeep'), num2str(getappdata(gcf, 'xrange')),num2str(getappdata(gcf, 'snrcut')) };
 
 prmpt = { 'High frequency filter corner, Hz', 'Low frequency filter corner, Hz',...
-    'Minimum Delta', 'Maximum Delta', 'Channel, comma seperated', 'Width of plotting window, s'};
+    'Minimum Delta', 'Maximum Delta', 'Channel, comma seperated', 'Width of plotting window, s', 'SNR cutoff'};
 
 sPar = inputdlg(prmpt, 'Set Data Parameters', 1, defAns);
 
@@ -2068,6 +2305,7 @@ if ~isempty(sPar)
     setappdata(gcf,'DeltaUpperLimit', sPar{4});
     setappdata(gcf,'ChannelsKeep',    sPar{5});
     setappdata(gcf,'xrange',          sPar{6});
+    setappdata(gcf,'snrcut',          sPar{7});
     
 end
 

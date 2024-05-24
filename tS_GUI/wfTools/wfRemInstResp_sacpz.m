@@ -19,7 +19,7 @@ for k=1:length(Traces)
     
     resp=Traces(k).sacpz;
     if resp.used==1
-        corrTraces(k) = wfInstCorr1trace_acausal(Traces(k), resp);
+        %corrTraces(k) = wfInstCorr1trace_acausal(Traces(k), resp);
         flag(k)=1;
         %corrTraces(k).comments=corrComment;
     else
