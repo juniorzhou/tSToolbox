@@ -59,6 +59,25 @@ for ke=kestart:length(E)
     eventData = E(ke);
     eventtime_yyMMddHHmmss = datetime(eventData.PreferredTime);
     eventtime_yyMMddHHmmss.Format = 'yyMMddHHmmss';
+    %% check for specfic event
+    strToSearch = sprintf('%s',eventtime_yyMMddHHmmss);
+    filelst = 'eventlst';
+    fileID = fopen(filelst, 'r');
+    stringFound = false;
+    disp(strToSearch)
+    while ~feof(fileID)
+        line = fgetl(fileID);
+        % Check if the string is present in the line
+        if contains(line, strToSearch)
+            stringFound = true;
+            break;  % Exit the loop if the string is found
+        end
+    end
+    fclose(fileID);
+    if ~stringFound
+        continue
+    end
+    %% check end
     fname     = sprintf('%s_%s',tag,eventtime_yyMMddHHmmss);
     if isfile(strcat(fname,'.mat'))
         disp(['event ' fname ' already downloaded, skip'])
@@ -195,7 +214,7 @@ for ke=kestart:length(E)
     end
         
     Traces   = wfResample(Traces, sample_rate);
-    Traces   = wfRemInstResp_sacpz(Traces);
+    %Traces   = wfRemInstResp_sacpz(Traces);
     
     save(fname,'Traces','eventData')
     

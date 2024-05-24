@@ -59,6 +59,7 @@ function [trace_resp] = getresp_fsdn(Trace,datacenter)
         end
         if ~strcmp(xmlresp_str(3:5),'xml')
             warning("wrong return value for link %s, skip",url)
+            trace_resp(i).sacpz.used=0;
             continue
         end    
         resp=parse_xmlresp(xmlresp_str,url);
